@@ -108,6 +108,9 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
     public weak var delegate: EPUBNavigatorDelegate? {
         didSet { notifyCurrentLocation() }
     }
+    
+    public var onSelection: ((_ selection: Selection) -> Void)?
+    
     public var userSettings: UserSettings
 
     public var readingProgression: ReadingProgression {
@@ -802,10 +805,12 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
             editingActions.selection = nil
             return
         }
+        
         editingActions.selection = Selection(
             locator: locator.copy(text: { $0 = text }),
             frame: frame
         )
+        
     }
 
     func spreadViewPagesDidChange(_ spreadView: EPUBSpreadView) {
@@ -829,7 +834,8 @@ extension EPUBNavigatorViewController: EditingActionsControllerDelegate {
     }
 
     func editingActions(_ editingActions: EditingActionsController, shouldShowMenuForSelection selection: Selection) -> Bool {
-        true
+        onSelection?(selection)
+        return true
     }
 
     func editingActions(_ editingActions: EditingActionsController, canPerformAction action: EditingAction, for selection: Selection) -> Bool {

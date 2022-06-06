@@ -4589,8 +4589,8 @@ function getCurrentSelectionText() {
   if (lastWordEnd !== undefined && lastWordEnd.index > 1) {
     after = after.slice(0, lastWordEnd.index + 1);
   }
-
-  return { highlight, before, after };
+  const actualHighlight = text.slice(start,end);
+  return { highlight: actualHighlight, before, after };
 }
 
 function createOrderedRange(startNode, startOffset, endNode, endOffset) {

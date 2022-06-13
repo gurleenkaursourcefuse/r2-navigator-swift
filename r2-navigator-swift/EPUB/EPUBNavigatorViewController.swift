@@ -110,6 +110,8 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
     }
     
     public var onSelection: ((_ selection: Selection) -> Void)?
+    public var isAllowingSelection = true
+    
     
     public var userSettings: UserSettings
 
@@ -835,11 +837,11 @@ extension EPUBNavigatorViewController: EditingActionsControllerDelegate {
 
     func editingActions(_ editingActions: EditingActionsController, shouldShowMenuForSelection selection: Selection) -> Bool {
         onSelection?(selection)
-        return true
+        return isAllowingSelection
     }
 
     func editingActions(_ editingActions: EditingActionsController, canPerformAction action: EditingAction, for selection: Selection) -> Bool {
-        true
+        return isAllowingSelection
     }
 }
 

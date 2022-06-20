@@ -230,8 +230,13 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         self.readingProgression = publication.metadata.effectiveReadingProgression
         self.config = config
         self.userSettings = config.userSettings
+        
         publication.userProperties.properties = userSettings.userProperties.properties
-        self.paginationView = PaginationView(frame: .zero, preloadPreviousPositionCount: config.preloadPreviousPositionCount, preloadNextPositionCount: config.preloadNextPositionCount)
+        var verticalScroll = false
+        if let scroll = userSettings.userProperties.getProperty(reference: ReadiumCSSReference.scroll.rawValue) as? Switchable {
+            verticalScroll = scroll.on
+        }
+        self.paginationView = PaginationView(frame: .zero, preloadPreviousPositionCount: config.preloadPreviousPositionCount, preloadNextPositionCount: config.preloadNextPositionCount, verticalScroll: verticalScroll)
 
         self.resourcesURL = {
             do {
@@ -379,6 +384,10 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
     ) { [weak self] in
         guard let self = self else { return }
 
+        if let scroll = self.userSettings.userProperties.getProperty(reference: ReadiumCSSReference.scroll.rawValue) as? Switchable {
+            self.paginationView.verticalScroll = scroll.on
+            self.paginationView.layoutSubviews()
+        }
         self.reloadSpreads()
 
         let location = self.currentLocation

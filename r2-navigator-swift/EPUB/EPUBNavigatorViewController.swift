@@ -274,6 +274,7 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTapBackground)))
 
         editingActions.updateSharedMenuController()
+        
         reloadSpreads(at: initialLocation)
     }
     
@@ -466,7 +467,6 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         if let maxChapter = self.config.trimmedToc?.last, let index = self.spreads.firstIndex(withHref: maxChapter.href) {
             self.paginationView.maxPageNumber = index
         }
-        
         
         let initialIndex: Int = {
             if let href = locator?.href, let foundIndex = spreads.firstIndex(withHref: href) {

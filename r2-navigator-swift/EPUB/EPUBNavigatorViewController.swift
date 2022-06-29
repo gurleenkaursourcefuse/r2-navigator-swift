@@ -82,6 +82,8 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
 
         /// Logs the state changes when true.
         public var debugState: Bool
+        
+        public var trimmedToc: [Link]?
 
         public init(
             userSettings: UserSettings = UserSettings(),
@@ -272,7 +274,6 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTapBackground)))
 
         editingActions.updateSharedMenuController()
-
         reloadSpreads(at: initialLocation)
     }
     
@@ -467,6 +468,14 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         }()
         
         paginationView.reloadAtIndex(initialIndex, location: PageLocation(locator), pageCount: spreads.count, readingProgression: readingProgression) {
+            if let minChapter = self.config.trimmedToc?.first, let index = self.spreads.firstIndex(withHref: minChapter.href) {
+                self.paginationView.minPageNumber = index
+            }
+            
+            if let maxChapter = self.config.trimmedToc?.last, let index = self.spreads.firstIndex(withHref: maxChapter.href) {
+                self.paginationView.maxPageNumber = index
+            }
+            
             self.on(.loaded)
         }
     }
@@ -858,6 +867,9 @@ extension EPUBNavigatorViewController: PaginationViewDelegate {
     
     func paginationView(_ paginationView: PaginationView, pageViewAtIndex index: Int) -> (UIView & PageView)? {
         let spread = spreads[index]
+        if let trimmedToc = config.trimmedToc, trimmedToc.map({ spread.contains(href: $0.href) }).filter({ $0 }).isEmpty {
+            return nil
+        }
         let spreadViewType = (spread.layout == .fixed) ? EPUBFixedSpreadView.self : EPUBReflowableSpreadView.self
         let spreadView = spreadViewType.init(
             publication: publication,
@@ -890,7 +902,11 @@ extension EPUBNavigatorViewController: PaginationViewDelegate {
     }
 
     func paginationView(_ paginationView: PaginationView, positionCountAtIndex index: Int) -> Int {
-        return spreads[index].positionCount(in: publication)
+        let spread = spreads[index]
+        if let trimmedToc = config.trimmedToc, trimmedToc.map({ spread.contains(href: $0.href) }).filter({ $0 }).isEmpty {
+            return 0
+        }
+        return spread.positionCount(in: publication)
     }
 }
 

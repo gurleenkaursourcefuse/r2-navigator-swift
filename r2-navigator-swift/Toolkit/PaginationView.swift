@@ -70,6 +70,9 @@ final class PaginationView: UIView, Loggable {
     /// Pre-loaded page views, indexed by their position.
     private(set) var loadedViews: [Int: (UIView & PageView)] = [:]
     
+    public var minPageNumber: Int?
+    public var maxPageNumber: Int?
+    
     /// Number of positions (as in `Publication.positionList`) to preload before and after the
     /// current page.
     private let preloadPreviousPositionCount: Int
@@ -145,11 +148,14 @@ final class PaginationView: UIView, Loggable {
         
         let size = scrollView.bounds.size
         if self.verticalScroll {
-            scrollView.contentSize = CGSize(width: size.width, height: size.height * CGFloat(pageCount))
+            let minPage = minPageNumber ?? 0
+            let maxPage = maxPageNumber ?? pageCount
+            let totalHeight = size.height * CGFloat(maxPage - minPage + 1)
+            scrollView.contentSize = CGSize(width: size.width, height: totalHeight)
             for (index, view) in loadedViews {
-                view.frame = CGRect(origin: CGPoint(x: 0, y:  yOffsetForIndex(index)), size: size)
+                view.frame = CGRect(origin: CGPoint(x: 0, y:  yOffsetForIndex(index - minPage)), size: size)
             }
-            scrollView.contentOffset.y = yOffsetForIndex(currentIndex)
+            scrollView.contentOffset.y = yOffsetForIndex(currentIndex - minPage)
         }
         else {
             scrollView.contentSize = CGSize(width: size.width * CGFloat(pageCount), height: size.height)
@@ -197,7 +203,9 @@ final class PaginationView: UIView, Loggable {
 
     /// Updates the current and pre-loaded views.
     private func setCurrentIndex(_ index: Int, location: PageLocation? = nil, completion: @escaping () -> Void = {}) {
-        guard isEmpty || index != currentIndex else {
+        let minPage = minPageNumber ?? 0
+        let maxPage = maxPageNumber ?? pageCount
+        guard isEmpty || index != currentIndex, index >= minPage && index <= maxPage else {
             completion()
             return
         }
@@ -290,10 +298,14 @@ final class PaginationView: UIView, Loggable {
         guard 0..<pageCount ~= index else {
             return false
         }
-
-        loadingIndexQueue.removeAll { $0.index == index }
-        loadingIndexQueue.append((index: index, location: location))
-        return true
+        
+        if let _ = delegate?.paginationView(self, pageViewAtIndex: index) {
+            loadingIndexQueue.removeAll { $0.index == index }
+            loadingIndexQueue.append((index: index, location: location))
+            return true
+        } else {
+            return false
+        }
     }
 
     private enum PageIndexDirection: Int {
@@ -347,11 +359,12 @@ final class PaginationView: UIView, Loggable {
 
         scrollView.isScrollEnabled = true
         setCurrentIndex(index, location: location, completion: completion)
+        let minPage = minPageNumber ?? 0
 
         scrollView.scrollRectToVisible(CGRect(
             origin: CGPoint(
                 x: self.verticalScroll ? scrollView.contentOffset.x : xOffsetForIndex(index),
-                y: self.verticalScroll ? yOffsetForIndex(index) : scrollView.contentOffset.y
+                y: self.verticalScroll ? yOffsetForIndex(index - minPage) : scrollView.contentOffset.y
             ),
             size: scrollView.frame.size
         ), animated: false)
@@ -384,12 +397,12 @@ extension PaginationView: UIScrollViewDelegate {
     
     public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         scrollView.isScrollEnabled = true
-        
+        let minPage = minPageNumber ?? 0
         if self.verticalScroll {
             let currentOffset = (readingProgression == .rtl)
                 ? scrollView.contentSize.height - (scrollView.contentOffset.y + scrollView.frame.height)
                 : scrollView.contentOffset.y
-            let newIndex = Int(round(currentOffset / scrollView.frame.height))
+            let newIndex = Int(round(currentOffset / scrollView.frame.height)) + minPage
             
             setCurrentIndex(newIndex)
         }

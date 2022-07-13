@@ -699,6 +699,16 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
                 }
             }
         }
+        
+        // SF: HSA-475 Enabling video controls
+        let videoControlScript = """
+                let videoElements = document.getElementsByTagName("video");
+                for(video of videoElements) {
+                    video.setAttribute("controls",true);
+                }
+        """
+        
+        spreadView.evaluateScript(videoControlScript)
     }
 
     func spreadView(_ spreadView: EPUBSpreadView, didTapAt point: CGPoint) {

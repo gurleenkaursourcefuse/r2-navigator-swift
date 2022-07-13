@@ -82,6 +82,8 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
 
         /// Logs the state changes when true.
         public var debugState: Bool
+        
+        public var trimmedToc: [Link]?
 
         public init(
             userSettings: UserSettings = UserSettings(),
@@ -108,6 +110,11 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
     public weak var delegate: EPUBNavigatorDelegate? {
         didSet { notifyCurrentLocation() }
     }
+    
+    public var onSelection: ((_ selection: Selection) -> Void)?
+    public var isAllowingSelection = true
+    
+    
     public var userSettings: UserSettings
 
     public var readingProgression: ReadingProgression {
@@ -225,8 +232,13 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         self.readingProgression = publication.metadata.effectiveReadingProgression
         self.config = config
         self.userSettings = config.userSettings
+        
         publication.userProperties.properties = userSettings.userProperties.properties
-        self.paginationView = PaginationView(frame: .zero, preloadPreviousPositionCount: config.preloadPreviousPositionCount, preloadNextPositionCount: config.preloadNextPositionCount)
+        var verticalScroll = false
+        if let scroll = userSettings.userProperties.getProperty(reference: ReadiumCSSReference.scroll.rawValue) as? Switchable {
+            verticalScroll = scroll.on
+        }
+        self.paginationView = PaginationView(frame: .zero, preloadPreviousPositionCount: config.preloadPreviousPositionCount, preloadNextPositionCount: config.preloadNextPositionCount, verticalScroll: verticalScroll)
 
         self.resourcesURL = {
             do {
@@ -262,7 +274,7 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
         view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTapBackground)))
 
         editingActions.updateSharedMenuController()
-
+        
         reloadSpreads(at: initialLocation)
     }
     
@@ -374,6 +386,10 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
     ) { [weak self] in
         guard let self = self else { return }
 
+        if let scroll = self.userSettings.userProperties.getProperty(reference: ReadiumCSSReference.scroll.rawValue) as? Switchable {
+            self.paginationView.verticalScroll = scroll.on
+            self.paginationView.layoutSubviews()
+        }
         self.reloadSpreads()
 
         let location = self.currentLocation
@@ -443,6 +459,14 @@ open class EPUBNavigatorViewController: UIViewController, VisualNavigator, Selec
 
         let locator = locator ?? currentLocation
         spreads = EPUBSpread.makeSpreads(for: publication, readingProgression: readingProgression, pageCountPerSpread: pageCountPerSpread)
+        
+        if let minChapter = self.config.trimmedToc?.first, let index = self.spreads.firstIndex(withHref: minChapter.href) {
+            self.paginationView.minPageNumber = index
+        }
+        
+        if let maxChapter = self.config.trimmedToc?.last, let index = self.spreads.firstIndex(withHref: maxChapter.href) {
+            self.paginationView.maxPageNumber = index
+        }
         
         let initialIndex: Int = {
             if let href = locator?.href, let foundIndex = spreads.firstIndex(withHref: href) {
@@ -675,6 +699,16 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
                 }
             }
         }
+        
+        // SF: HSA-475 Enabling video controls
+        let videoControlScript = """
+                let videoElements = document.getElementsByTagName("video");
+                for(video of videoElements) {
+                    video.setAttribute("controls",true);
+                }
+        """
+        
+        spreadView.evaluateScript(videoControlScript)
     }
 
     func spreadView(_ spreadView: EPUBSpreadView, didTapAt point: CGPoint) {
@@ -802,10 +836,12 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
             editingActions.selection = nil
             return
         }
+        
         editingActions.selection = Selection(
             locator: locator.copy(text: { $0 = text }),
             frame: frame
         )
+        
     }
 
     func spreadViewPagesDidChange(_ spreadView: EPUBSpreadView) {
@@ -829,11 +865,12 @@ extension EPUBNavigatorViewController: EditingActionsControllerDelegate {
     }
 
     func editingActions(_ editingActions: EditingActionsController, shouldShowMenuForSelection selection: Selection) -> Bool {
-        true
+        onSelection?(selection)
+        return isAllowingSelection
     }
 
     func editingActions(_ editingActions: EditingActionsController, canPerformAction action: EditingAction, for selection: Selection) -> Bool {
-        true
+        return isAllowingSelection
     }
 }
 
@@ -841,6 +878,9 @@ extension EPUBNavigatorViewController: PaginationViewDelegate {
     
     func paginationView(_ paginationView: PaginationView, pageViewAtIndex index: Int) -> (UIView & PageView)? {
         let spread = spreads[index]
+        if let trimmedToc = config.trimmedToc, trimmedToc.map({ spread.contains(href: $0.href) }).filter({ $0 }).isEmpty {
+            return nil
+        }
         let spreadViewType = (spread.layout == .fixed) ? EPUBFixedSpreadView.self : EPUBReflowableSpreadView.self
         let spreadView = spreadViewType.init(
             publication: publication,
@@ -873,7 +913,11 @@ extension EPUBNavigatorViewController: PaginationViewDelegate {
     }
 
     func paginationView(_ paginationView: PaginationView, positionCountAtIndex index: Int) -> Int {
-        return spreads[index].positionCount(in: publication)
+        let spread = spreads[index]
+        if let trimmedToc = config.trimmedToc, trimmedToc.map({ spread.contains(href: $0.href) }).filter({ $0 }).isEmpty {
+            return 0
+        }
+        return spread.positionCount(in: publication)
     }
 }
 

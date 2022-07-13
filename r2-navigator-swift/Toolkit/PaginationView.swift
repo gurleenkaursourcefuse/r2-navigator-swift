@@ -70,10 +70,14 @@ final class PaginationView: UIView, Loggable {
     /// Pre-loaded page views, indexed by their position.
     private(set) var loadedViews: [Int: (UIView & PageView)] = [:]
     
+    public var minPageNumber: Int?
+    public var maxPageNumber: Int?
+    
     /// Number of positions (as in `Publication.positionList`) to preload before and after the
     /// current page.
     private let preloadPreviousPositionCount: Int
     private let preloadNextPositionCount: Int
+    public var verticalScroll: Bool
 
     /// Queue of page index to be loaded next.
     private var loadingIndexQueue: [(index: Int, location: PageLocation)] = []
@@ -103,9 +107,11 @@ final class PaginationView: UIView, Loggable {
 
     private let scrollView = UIScrollView()
     
-    init(frame: CGRect, preloadPreviousPositionCount: Int, preloadNextPositionCount: Int) {
+    init(frame: CGRect, preloadPreviousPositionCount: Int, preloadNextPositionCount: Int,
+            verticalScroll: Bool) {
         self.preloadPreviousPositionCount = preloadPreviousPositionCount
         self.preloadNextPositionCount = preloadNextPositionCount
+        self.verticalScroll = verticalScroll
         
         super.init(frame: frame)
         
@@ -141,13 +147,23 @@ final class PaginationView: UIView, Loggable {
         }
         
         let size = scrollView.bounds.size
-        scrollView.contentSize = CGSize(width: size.width * CGFloat(pageCount), height: size.height)
-
-        for (index, view) in loadedViews {
-            view.frame = CGRect(origin: CGPoint(x: xOffsetForIndex(index), y: 0), size: size)
+        if self.verticalScroll {
+            let minPage = minPageNumber ?? 0
+            let maxPage = maxPageNumber ?? pageCount
+            let totalHeight = size.height * CGFloat(maxPage - minPage + 1)
+            scrollView.contentSize = CGSize(width: size.width, height: totalHeight)
+            for (index, view) in loadedViews {
+                view.frame = CGRect(origin: CGPoint(x: 0, y:  yOffsetForIndex(index - minPage)), size: size)
+            }
+            scrollView.contentOffset.y = yOffsetForIndex(currentIndex - minPage)
         }
-        
-        scrollView.contentOffset.x = xOffsetForIndex(currentIndex)
+        else {
+            scrollView.contentSize = CGSize(width: size.width * CGFloat(pageCount), height: size.height)
+            for (index, view) in loadedViews {
+                view.frame = CGRect(origin: CGPoint(x: xOffsetForIndex(index), y:  0), size: size)
+            }
+            scrollView.contentOffset.x = xOffsetForIndex(currentIndex)
+        }
     }
     
     /// Returns the x offset to the page view with given index in the scroll view.
@@ -156,7 +172,11 @@ final class PaginationView: UIView, Loggable {
             ? scrollView.contentSize.width - (CGFloat(index + 1) * scrollView.bounds.width)
             : scrollView.bounds.width * CGFloat(index)
     }
-    
+    private func yOffsetForIndex(_ index: Int) -> CGFloat {
+        return (readingProgression == .rtl)
+            ? scrollView.contentSize.height - (CGFloat(index + 1) * scrollView.bounds.height)
+            : scrollView.bounds.height * CGFloat(index)
+    }
     /// Reloads the pagination with the given total number of pages and current index.
     ///
     /// - Parameters:
@@ -183,7 +203,9 @@ final class PaginationView: UIView, Loggable {
 
     /// Updates the current and pre-loaded views.
     private func setCurrentIndex(_ index: Int, location: PageLocation? = nil, completion: @escaping () -> Void = {}) {
-        guard isEmpty || index != currentIndex else {
+        let minPage = minPageNumber ?? 0
+        let maxPage = maxPageNumber ?? pageCount
+        guard isEmpty || index != currentIndex, index >= minPage && index <= maxPage else {
             completion()
             return
         }
@@ -276,10 +298,14 @@ final class PaginationView: UIView, Loggable {
         guard 0..<pageCount ~= index else {
             return false
         }
-
-        loadingIndexQueue.removeAll { $0.index == index }
-        loadingIndexQueue.append((index: index, location: location))
-        return true
+        
+        if let _ = delegate?.paginationView(self, pageViewAtIndex: index) {
+            loadingIndexQueue.removeAll { $0.index == index }
+            loadingIndexQueue.append((index: index, location: location))
+            return true
+        } else {
+            return false
+        }
     }
 
     private enum PageIndexDirection: Int {
@@ -333,11 +359,12 @@ final class PaginationView: UIView, Loggable {
 
         scrollView.isScrollEnabled = true
         setCurrentIndex(index, location: location, completion: completion)
+        let minPage = minPageNumber ?? 0
 
         scrollView.scrollRectToVisible(CGRect(
             origin: CGPoint(
-                x: xOffsetForIndex(index),
-                y: scrollView.contentOffset.y
+                x: self.verticalScroll ? scrollView.contentOffset.x : xOffsetForIndex(index),
+                y: self.verticalScroll ? yOffsetForIndex(index - minPage) : scrollView.contentOffset.y
             ),
             size: scrollView.frame.size
         ), animated: false)
@@ -370,14 +397,22 @@ extension PaginationView: UIScrollViewDelegate {
     
     public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         scrollView.isScrollEnabled = true
-        
-        let currentOffset = (readingProgression == .rtl)
-            ? scrollView.contentSize.width - (scrollView.contentOffset.x + scrollView.frame.width)
-            : scrollView.contentOffset.x
-        
-        let newIndex = Int(round(currentOffset / scrollView.frame.width))
-        
-        setCurrentIndex(newIndex)
+        let minPage = minPageNumber ?? 0
+        if self.verticalScroll {
+            let currentOffset = (readingProgression == .rtl)
+                ? scrollView.contentSize.height - (scrollView.contentOffset.y + scrollView.frame.height)
+                : scrollView.contentOffset.y
+            let newIndex = Int(round(currentOffset / scrollView.frame.height)) + minPage
+            
+            setCurrentIndex(newIndex)
+        }
+        else {
+            let currentOffset = (readingProgression == .rtl)
+                ? scrollView.contentSize.width - (scrollView.contentOffset.x + scrollView.frame.width)
+                : scrollView.contentOffset.x
+            let newIndex = Int(round(currentOffset / scrollView.frame.width))
+
+            setCurrentIndex(newIndex)
+        }
     }
-    
 }

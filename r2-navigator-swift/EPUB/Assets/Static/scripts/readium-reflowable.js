@@ -5268,7 +5268,7 @@ function resolveOffsets(element, ...offsets) {
   let nextOffset = offsets.shift();
   const nodeIter = /** @type {Document} */ (
     element.ownerDocument
-  ).createNodeIterator(element, NodeFilter.SHOW_TEXT);
+  ).createNodeIterator(element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_CDATA_SECTION);
   const results = [];
 
   let currentNode = nodeIter.nextNode();
